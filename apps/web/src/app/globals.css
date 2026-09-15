@@ -1,0 +1,134 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0e1a;
+  --foreground: #e8ecf2;
+  --studio-bg: #0a0e1a;
+  --studio-bg-deep: #070a12;
+  --studio-surface: #141826;
+  --studio-surface-2: #1a1f2e;
+  --studio-input: #101522;
+  --studio-border: #242a3a;
+  --studio-text: #e8ecf2;
+  --studio-secondary: #9ba5b5;
+  --studio-muted: #5a6478;
+  --studio-purple: #a36bff;
+  --studio-gold: #ffc875;
+  --studio-success: #5eead4;
+  --studio-warning: #fbbf24;
+  --studio-danger: #f87171;
+  --studio-info: #7dd3fc;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+.studio-shell {
+  background:
+    radial-gradient(circle at 8% -10%, rgba(163, 107, 255, 0.18), transparent 30%),
+    linear-gradient(180deg, #0f1219 0%, #0a0e1a 42%, #070a12 100%);
+}
+
+.studio-sidebar,
+.studio-right-rail,
+.studio-bottom-panel,
+.studio-panel {
+  background: color-mix(in srgb, var(--studio-surface) 90%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.studio-panel {
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+}
+
+.studio-panel-title {
+  color: var(--studio-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.studio-empty {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  min-height: 132px;
+  padding: 18px;
+  border: 1px dashed color-mix(in srgb, var(--studio-purple) 34%, var(--studio-border));
+  border-radius: 8px;
+  color: var(--studio-secondary);
+  text-align: center;
+  background: rgba(163, 107, 255, 0.045);
+}
+
+button,
+input,
+select,
+textarea {
+  border-radius: 6px;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--studio-purple) 72%, transparent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(163, 107, 255, 0.32);
+}
+
+* {
+  scrollbar-color: rgba(163, 107, 255, 0.32) rgba(15, 23, 42, 0.6);
+}
+
+.podcast-speaker-line-teal {
+  background: rgba(94, 234, 212, 0.08);
+}
+.podcast-speaker-text-teal {
+  color: #5eead4 !important;
+}
+.podcast-speaker-line-amber {
+  background: rgba(251, 191, 36, 0.08);
+}
+.podcast-speaker-text-amber {
+  color: #fbbf24 !important;
+}
+.podcast-speaker-line-fuchsia {
+  background: rgba(244, 114, 182, 0.08);
+}
+.podcast-speaker-text-fuchsia {
+  color: #f472b6 !important;
+}
+.podcast-speaker-line-lime {
+  background: rgba(190, 242, 100, 0.08);
+}
+.podcast-speaker-text-lime {
+  color: #bef264 !important;
+}
+.podcast-speaker-line-sky {
+  background: rgba(14, 165, 233, 0.08);
+}
+.podcast-speaker-text-sky {
+  color: #7dd3fc !important;
+}
+.podcast-speaker-line-rose {
+  background: rgba(244, 63, 94, 0.08);
+}
+.podcast-speaker-text-rose {
+  color: #fecdd3 !important;
+}

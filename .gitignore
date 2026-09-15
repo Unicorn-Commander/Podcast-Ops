@@ -1,0 +1,88 @@
+# Podcast-Ops first-commit proposal. See SCAN-REPORT.md before applying.
+# Media and model artifacts (case insensitive extensions).
+*.[wW][aA][vV]
+*.[mM][pP]3
+*.[mM]4[aA]
+*.[fF][lL][aA][cC]
+*.[oO][pP][uU][sS]
+*.[oO][gG][gG]
+*.[mM][pP]4
+*.[mM][oO][vV]
+*.[wW][eE][bB][mM]
+*.safetensors
+*.bin
+*.gguf
+*.pt
+*.pth
+*.onnx
+huggingface/
+.cache/
+# Local credentials; examples remain eligible for review and scanning.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*
+secrets/
+tokens/
+# Dependencies and generated state.
+.venv/
+venv/
+env/
+node_modules/
+.next/
+dist/
+build/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.tsbuildinfo
+logs/
+*.log
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.state.json
+*.jsonl
+# Audit JSONL is excluded pending a separate sensitivity review.
+/shows/**/renders/
+/shows/**/audio/
+/shows/**/mix/
+/shows/**/mixes/
+/shows/**/mix outputs/
+/shows/**/mix-outputs/
+/shows/**/mix_outputs/
+/shows/**/outputs/
+# Private material and machine-specific operational artifacts.
+private/
+private-scripts/
+*.private.*
+/shows/**/voice-cloning-scripts/
+/shows/**/hardship-beat-for-ep2-or-founder-profile.md
+/network.html
+# Nested repository: do not accidentally stage an unusable gitlink.
+.git/
+# OS/editor junk.
+.DS_Store
+._*
+.Spotlight-V100/
+.Trashes/
+Thumbs.db
+Desktop.ini
+*~
+*.swp
+*.swo
+
+# Persephone review 2026-09-15: held out pending Aaron's review (partner client names; guest interview personal details)
+/briefs/
+/shows/**/episodes/ep01-interview/
+# nested create-next-app history moved aside so apps/web source can be tracked
+/apps/web/.git.local-cna-*/
