@@ -25,7 +25,7 @@ MAX_SIZE = 20 * 1024**3
 def relative(value: str) -> str:
     if not isinstance(value, str) or not value or len(value) > 1024:
         raise ValueError('Invalid relative path')
-    if '\\' in value or '%' in value or ':' in value or any(ord(c) < 32 for c in value):
+    if '\\' in value or '%' in value or ':' in value or any(ord(c) < 32 or ord(c) == 127 for c in value):
         raise ValueError('Invalid relative path')
     if value.startswith('/') or any(p in ('', '.', '..') for p in value.split('/')):
         raise ValueError('Traversal rejected')
@@ -128,7 +128,7 @@ def build_manifest(root: Path, repo: Path, selection: dict, seconds: float):
             if info['size'] <= 0:
                 raise ValueError('Empty media')
             mtimes[info['path']] = info.pop('mtimeNs')
-            entry.update({'available': True, 'artifact': {**info, 'mimeType': MEDIA[artifact.suffix.lower()]}})
+            entry.update({'available': True, 'artifact': {**info, 'mimeType': MEDIA[PurePosixPath(row['artifact']).suffix.lower()]}})
         # Metadata belongs to the episode directory, independent of artifact subfolders.
         base = f"shows/{selection['tenantNamespace']}/{row['show']}/{row['season']}/episodes/{row['episode']}"
         for name in ('script.md', 'episode.state.json'):

@@ -81,8 +81,8 @@ class ExportContract(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.manifest()
             selected.unlink()
-            self.make_wav(f'{self.base}/audio/inside.wav')
-            selected.symlink_to('inside.wav')
+            self.make_wav(f'{self.base}/audio/inside.bin')
+            selected.symlink_to('inside.bin')
             self.assertTrue(self.manifest()['episodes'][0]['available'])
 
     def test_changing_file_rejected(self):
