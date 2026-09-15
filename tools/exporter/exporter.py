@@ -145,7 +145,7 @@ def build_manifest(root: Path, repo: Path, selection: dict, seconds: float):
                         # Observed rail history, never filename-based approval.
                         if records:
                             status = records[-1].get('status', 'recorded')
-                            entry[field] = status if status in ('queued', 'running', 'completed', 'failed', 'recorded') else 'recorded'
+                            entry[field] = status if status in ('queued', 'running', 'completed', 'failed', 'cancelled', 'recorded') else 'recorded'
         if row.get('annotations') and resolve(root, row['annotations']).exists():
             info, content = metadata_file(root, row['annotations'], seconds)
             mtimes[info['path']] = info['mtimeNs']

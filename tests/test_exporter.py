@@ -127,6 +127,42 @@ class ExportContract(unittest.TestCase):
                 exporter.push(self.root, manifest, self.selected(), 'https://producer.example.invalid/api/podcast', 'synthetic', .001)
             client.assert_not_called()
 
+    def test_push_transfers_only_selected_snapshot_and_never_bearer_to_storage(self):
+        manifest = self.manifest()
+        calls = []
+        real_client = exporter.httpx.Client
+        def handle(request):
+            calls.append(request)
+            if request.url.host == 'storage.example.invalid':
+                self.assertNotIn('authorization', request.headers)
+                self.assertEqual(request.content, (self.root / self.media).read_bytes())
+                return exporter.httpx.Response(200)
+            self.assertEqual(request.headers['authorization'], 'Bearer synthetic')
+            action = request.url.path.split('/')[-1]
+            if action == 'manifest':
+                self.assertEqual(json.loads(request.content), manifest)
+                return exporter.httpx.Response(200, json={'uploads': [{'sourceKey': manifest['episodes'][0]['sourceKey'], 'uploadId': 'server-id', 'partSize': 1024 * 1024}]})
+            if action == 'parts':
+                self.assertEqual(json.loads(request.content), {'uploadId': 'server-id', 'partNumbers': [1]})
+                return exporter.httpx.Response(200, json=[{'number': 1, 'url': 'https://storage.example.invalid/opaque-key'}])
+            self.assertEqual(action, 'complete')
+            return exporter.httpx.Response(200, json={'assetId': 'server-asset'})
+        transport = exporter.httpx.MockTransport(handle)
+        with patch.object(exporter.httpx, 'Client', lambda **kwargs: real_client(transport=transport, **kwargs)):
+            self.assertEqual(exporter.push(self.root, manifest, self.selected(), 'https://producer.example.invalid/api/podcast', 'synthetic', .001), 1)
+        self.assertEqual(len(calls), 4)
+
+    def test_changed_after_manifest_never_transfers_media(self):
+        manifest = self.manifest()
+        (self.root / self.media).write_bytes(b'changed')
+        real_client = exporter.httpx.Client
+        def handle(request):
+            self.assertTrue(request.url.path.endswith('/manifest'))
+            return exporter.httpx.Response(200, json={'uploads': [{'sourceKey': manifest['episodes'][0]['sourceKey'], 'uploadId': 'server-id', 'partSize': 1024}]})
+        with patch.object(exporter.httpx, 'Client', lambda **kwargs: real_client(transport=exporter.httpx.MockTransport(handle), **kwargs)):
+            with self.assertRaisesRegex(ValueError, 'changed since manifest'):
+                exporter.push(self.root, manifest, self.selected(), 'https://producer.example.invalid/api/podcast', 'synthetic', .001)
+
     def test_stability_interval_and_insecure_destination_refused(self):
         for seconds in (0, -1, float('nan')):
             with self.assertRaises(ValueError):
