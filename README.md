@@ -158,3 +158,7 @@ Podcast-Ops/
 ---
 
 © Magic Unicorn Unconventional Technology & Stuff Inc.
+
+## Producer rail exporter
+
+The read-only [`podcast-ops-export`](tools/exporter/README.md) CLI inventories candidate renders and pushes only operator-selected artifacts through Producer's versioned ingest contract. Studio script/render/mix tools remain authoritative and unchanged.

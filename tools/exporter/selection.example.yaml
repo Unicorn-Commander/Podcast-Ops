@@ -1,0 +1,11 @@
+version: 1
+sourceInstallationId: operator-assigned-installation
+tenantNamespace: magic-unicorn
+# Copy to selection.yaml outside git; select one artifact per episode from propose.
+episodes:
+  - show: the-layer-above
+    season: season-1-majiks
+    episode: ep01-the-window
+    artifact: shows/magic-unicorn/the-layer-above/season-1-majiks/episodes/ep01-the-window/audio/OPERATOR-SELECTED.wav
+    # Optional, explicit consent to export this episode's imported history:
+    # annotations: shows/magic-unicorn/the-layer-above/season-1-majiks/episodes/ep01-the-window/episode.annotations.jsonl

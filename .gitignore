@@ -86,3 +86,8 @@ Desktop.ini
 /shows/**/episodes/ep01-interview/
 # nested create-next-app history moved aside so apps/web source can be tracked
 /apps/web/.git.local-cna-*/
+
+selection.yaml
+*manifest.local.json
+__pycache__/
+.venv/
