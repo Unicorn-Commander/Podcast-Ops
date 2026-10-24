@@ -25,17 +25,17 @@ A local studio for multi-voice podcast episodes: markdown scripts, speech render
 
 Podcast-Ops is the production desk for scripted, multi-voice shows. A producer keeps each episode as markdown on disk, renders the spoken sections through a VibeVoice HTTP server, and mixes a music bed into a loudness-normalized WAV and MP3.
 
-It is for people who want the episode files in git and a studio UI on top of them. Chat and script suggestions can go through [Unicorn Brigade](https://github.com/Unicorn-Commander/Unicorn-Brigade). The studio inserts an AI edit into the editor only after you approve it, and saving the file is a separate step. You run the API and the web app yourself. This repository does not share a database with the rest of the suite.
+It is for people who want the episode files in git and a studio UI on top of them. Chat and script suggestions can go through [Unicorn Brigade](https://github.com/Unicorn-Commander/Unicorn-Brigade). The studio inserts an AI edit into the editor only after you approve it; Save or starting a render writes the edited script to disk. You run the API and the web app yourself. This repository does not share a database with the rest of the suite.
 
 ## Highlights
 
-- **The episode is a folder.** Under `shows/`, each episode holds `script.md`, `notes.md`, `episode.state.json`, `episode.annotations.jsonl`, and `episode.chat.jsonl`. The checkout contains 2 shows, 3 seasons, 8 episode directories, and 7 scripts, so the studio is not empty on first launch.
-- **One studio page.** The Next.js app is a single page: show tree, Monaco script editor, waveform player, and an A/B compare view. It talks to the FastAPI app on port 8011.
-- **Section rendering.** A render job calls `tools/audio/render_episode.py`, which sends each `## §` section to VibeVoice and concatenates the WAVs with 0.6 seconds of silence. You can re-render selected sections. One job runs at a time. The queue lives in the API process and is gone when that process exits.
-- **A finished mix.** `tools/audio/build_episode_mix.sh` plays an intro, ducks the bed under the voice, swells an outro, and loudness-normalizes to −16 LUFS integrated, −1.5 dBTP true peak, loudness range 11. The API then writes a 256 kbps MP3 next to the WAV.
-- **Approval before the script changes.** `POST /ai/script-edit` returns a diff. The studio writes that text into the editor after you press Approve. Chat history is appended to `episode.chat.jsonl` and does not modify `script.md`.
+- **The episode is a folder.** Scripts live in episode folders under `shows/`; the API creates `notes.md`, `episode.state.json`, `episode.annotations.jsonl`, and `episode.chat.jsonl` as those features are used. The checkout contains 2 shows, 3 seasons, 8 episode directories, and 7 scripts, so the studio is not empty on first launch.
+- **One studio page.** The Next.js app is a single page: show tree, Monaco script editor, waveform player, and an A/B compare view. It talks to the FastAPI app on port 8011 by default.
+- **Section rendering.** A render job calls `tools/audio/render_episode.py`, which sends each `## §` section to VibeVoice and concatenates the WAVs with 0.6 seconds of silence. You can re-render selected sections. One render job runs at a time per API process. The queue lives in the API process and is gone when that process exits.
+- **A finished mix.** `tools/audio/build_episode_mix.sh` plays an intro, fades the bed down under the opening voice and then to silence, and adds an outro. It applies ffmpeg loudness normalization with targets of −16 LUFS integrated, −1.5 dBTP true peak, and loudness range 11 LU. The API then writes a 256 kbps MP3 next to the WAV.
+- **Approval before the script changes.** `POST /ai/script-edit` returns a diff. The studio inserts the returned `edited_script` after you press Approve. Chat history is appended to `episode.chat.jsonl` and does not modify `script.md`.
 - **A bearer when you want one.** If `PODCAST_OPS_API_TOKEN` is set, every HTTP route except `GET /health` requires `Authorization: Bearer <token>`. The bundled studio does not send that header, so leave the token unset while you use the UI. The render-log WebSocket is not covered by that HTTP check.
-- **Export only the file you named.** [`podcast-ops-export`](tools/exporter/README.md) inventories media, then uploads the exact artifact in your selection file. Script bodies stay on disk. The manifest carries a SHA-256 of the script. The bearer is sent to the ingest host, not to object storage.
+- **Export only the file you named.** [`podcast-ops-export`](tools/exporter/README.md) inventories media, then uploads the exact artifact in your selection file. Script bodies stay on disk. The manifest carries a SHA-256 of `script.md` when that file exists. The bearer is sent to the ingest host, not to object storage.
 
 ## Feature tour
 
@@ -50,17 +50,19 @@ flowchart LR
   concat --> voice["Voice-only WAV"]
   voice --> mix["build_episode_mix.sh"]
   bed["Music bed"] --> mix
-  mix --> master["WAV at -16 LUFS"]
+  mix --> master["WAV, -16 LUFS target"]
   master --> mp3["MP3 at 256 kbps"]
 ```
 
 ### Episode library
 
-`GET /shows` walks `shows/`. A directory is a show when one of its children contains `episodes/`. A parent directory above that show is reported as the tenant. The tree in this repository sits at `shows/magic-unicorn/`.
+`GET /shows` scans `shows/<show>/<season>/episodes/` and `shows/<tenant>/<show>/<season>/episodes/`. A directory is a show when one of its children contains `episodes/`; the optional parent directory supplies the tenant label. The tree in this repository sits at `shows/magic-unicorn/`. API lookup uses only the show slug, so use distinct show slugs across tenants.
 
-Each episode row shows the title and `status` from the script frontmatter, how many audio files are present, and the newest audio mtime. The studio can duplicate an episode (`POST .../duplicate`): the new folder gets merged frontmatter, `status: draft`, an empty `audio/` directory, and either the old body or a single cold-open heading. Show settings write `defaults` into `<show>/show.yaml`. Adding a show is a new directory on disk. The “New show” button in the sidebar has no handler.
+Each episode row shows a title, slug, status badge, and time since the newest audio file was modified. The API reads title and status from frontmatter when present and returns an audio count; the UI uses that count and active jobs to derive its status badge. The studio can duplicate an episode (`POST .../duplicate`): the new folder gets merged frontmatter, `status: draft`, an empty `audio/` directory, and either the old body or a single cold-open heading. Show settings write `defaults` into `<show>/show.yaml`. To add a show on disk, create its directory with a `<season>/episodes/` subtree. The “New show” button in the sidebar has no handler.
 
-The season brief panel reads `source/source-of-truth.md` beside the season, beside the show, or from a sibling show in the same tenant that has the same season name.
+The season brief panel reads `<show>/<season>/source/source-of-truth.md`, falls back to `<show>/source/source-of-truth.md`, then checks sibling shows in the same tenant for a source file under the same season name.
+
+The original `majiks-pitch-investor-2026` material is under `shows/magic-unicorn/the-layer-above/season-1-majiks/`: a source brief, five episode outlines, and five scripts. These files can also be edited directly on disk.
 
 ### Script editor
 
@@ -92,19 +94,19 @@ The reply.
 
 ### Speech render
 
-`POST /shows/{show}/seasons/{season}/episodes/{episode}/render` queues a job. The worker runs `tools/audio/render_episode.py` with `--host` set to `VIBEVOICE_URL`. A full render writes `<prefix>-voice-only.wav` and a sibling `.sections` directory of per-section WAVs. A partial render rebuilds the requested sections into that directory and concatenates them.
+`POST /shows/{show}/seasons/{season}/episodes/{episode}/render` queues a job. The worker runs `tools/audio/render_episode.py` with `--host` set to `VIBEVOICE_URL`. A full render writes `<prefix>-voice-only.wav` and a sibling `.sections` directory of per-section WAVs. A partial render replaces requested sections in the existing cache, or seeds it from the most recently modified `.sections` directory in the episode’s `audio/` folder, then concatenates the cached WAVs. Without a prior cache, it outputs only the requested sections.
 
-`GET /render-jobs` and `GET /render-jobs/{job_id}` read the in-memory job list. `DELETE /render-jobs/{job_id}` marks the job cancelled and terminates the child process. `WS /render-jobs/{job_id}/stream` pushes log lines. Completed and failed renders are also appended to `episode.state.json`.
+`GET /render-jobs` and `GET /render-jobs/{job_id}` read the in-memory job list. `DELETE /render-jobs/{job_id}` marks a queued or running job cancelled and sends a termination signal to its active child process; finished jobs are returned unchanged. `WS /render-jobs/{job_id}/stream` pushes log lines. The worker appends completion records and errors caught during rendering to `episode.state.json`.
 
-The request body accepts `version`, `ddpm_steps`, `cfg_scale`, and `sections`. The API stores those fields and exports the step and scale values as environment variables for the child. `render_episode.py` does not read them. It posts `{"script", "voices", "format": "wav"}` to `{VIBEVOICE_URL}/podcast`. Speech quality is whatever that server does with that payload.
+The request body accepts `version`, `ddpm_steps`, `cfg_scale`, and `sections`. The API stores those fields and exports the step and scale values as environment variables for the child. `render_episode.py` does not read them. It posts a JSON object with `script`, `voices`, and `format: "wav"` to `{VIBEVOICE_URL}/podcast`. Speech quality is whatever that server does with that payload.
 
 ### Music mix
 
-`POST .../mix` runs `tools/audio/build_episode_mix.sh` on a voice WAV that already exists in the episode `audio/` directory. `mode: music_under_voice` needs a music bed resolved from `assets/music-beds/`, a show-level bed directory, or the episode `audio/` folder. `mode: music_off` masters the voice alone. The shell script reads `INTRO_HOT_S`, `INTRO_FADE_S`, and `OUTRO_S` from the environment; the API sets them from the request. The request field `master_lufs` is stored on the mix row and is not passed into the shell script. The script always normalizes to −16 LUFS.
+`POST .../mix` runs `tools/audio/build_episode_mix.sh` on a voice WAV that already exists in the episode `audio/` directory. `mode: music_under_voice` looks up a named bed in `assets/music-beds/`, any `shows/**/assets/music-beds/` directory, or any episode’s `audio/` folder. `mode: music_off` masters the voice alone. The shell script reads `INTRO_HOT_S`, `INTRO_FADE_S`, and `OUTRO_S` from the environment; the API sets them from the request. The request field `master_lufs` is stored on the mix row and is not passed into the shell script. The script always uses a −16 LUFS normalization target.
 
 The API then encodes `<stem>.mp3` with `libmp3lame` at 256 kbps. Both outputs are listed on the episode.
 
-`POST /music-beds/extract` cuts a WAV out of a file under `MUSIC_CATALOG_PATH` with ffmpeg (`-ss`, `-t`, stereo, 48 kHz PCM) and stores it in `assets/music-beds/`.
+`POST /music-beds/extract` resolves a source filename under `MUSIC_CATALOG_PATH`, or accepts an existing absolute source path, then cuts a WAV with ffmpeg (`-ss`, `-t`, stereo, 48 kHz PCM) into `assets/music-beds/`.
 
 ### Player, compare, and annotations
 
@@ -118,26 +120,26 @@ The compare view plays two episode files from the same playhead. On macOS, the s
 
 `GET /music-beds` lists audio files under `assets/music-beds/` and any `shows/**/assets/music-beds/` directory. This checkout does not include those audio files. WAV, MP3, and the other media extensions are gitignored.
 
-Fourteen voice-profile markdown files live under `shows/magic-unicorn/the-layer-above/season-1-majiks/voices/`. They are show notes. `GET /voices` does not read them.
+Fourteen voice-profile markdown files live under `shows/magic-unicorn/the-layer-above/season-1-majiks/voices/`: six main-cast profiles and eight vertical profiles. They are show notes. `GET /voices` does not read them.
 
 ### Chat and script edits
 
-The studio chat rail calls `POST /chat/brigade` and streams server-sent events. The agent id is one of `majik`, `the-general`, `gunny`, or `gflow`. Any other id is treated as `majik`. The system prompt includes a JSON snippet of the episode context, truncated at 12,000 characters. Turns are appended to `episode.chat.jsonl`.
+The studio chat rail calls `POST /chat/brigade` and streams server-sent events. The agent id is one of `majik`, `the-general`, `gunny`, or `gflow`. Any other id is treated as `majik`. The system prompt includes a JSON snippet of the episode context, truncated at 12,000 characters. When `episode_context` identifies an existing episode, the API appends up to the last four submitted messages and the completed reply to `episode.chat.jsonl`.
 
 When `BRIGADE_BASE_URL` and `BRIGADE_API_KEY` are both set, chat streams from `{BRIGADE_BASE_URL}/openai/v1/chat/completions`. When they are not set, the API streams a local notice that Brigade is unconfigured.
 
-`POST /ai/script-edit` asks Brigade for a revised markdown document and returns a unified diff. The web client shows that diff and waits for Approve. If Brigade is unset or errors, and the instruction contains “tight” or “short”, a local fallback deletes a fixed list of filler words. Any other instruction is returned unchanged. `POST /ai/generate-script` is API-only. The web client does not call it. Its local fallback is a two-speaker skeleton with frontmatter and two sections.
+`POST /ai/script-edit` asks Brigade for revised markdown text and returns it with a unified diff. The studio sends the selected text or section. The web client shows that diff and waits for Approve. If Brigade is unset or errors, and the instruction contains “tight” or “short”, a local fallback deletes a fixed list of filler words. For other instructions, the local fallback leaves the script alone before the route’s code-fence removal and whitespace trimming. `POST /ai/generate-script` is API-only. The web client does not call it. Its local fallback is a two-speaker skeleton with frontmatter and two sections.
 
 ### Selected export
 
-The exporter is a separate CLI. It does not call the studio API, and it does not render or mix. Full operator notes are in [`tools/exporter/README.md`](tools/exporter/README.md). Use your own `--root` and `--endpoint`. The sample values in that file are not a public server. The contract, short version:
+The exporter is a separate CLI. It does not call the studio API, and it does not render or mix. Full operator notes are in [`tools/exporter/README.md`](tools/exporter/README.md). Use your own `--root` and `--endpoint`. Replace the machine-specific sample paths and endpoint before running those commands. The contract, short version:
 
 1. `propose` writes a metadata report (path, size, ffprobe duration) for media under one tenant, show, and season. It does not choose a take.
-2. You copy [`tools/exporter/selection.example.yaml`](tools/exporter/selection.example.yaml) to `selection.yaml` (gitignored) and name one artifact path per episode. Paths must stay inside `shows/<tenant>/<show>/<season>/episodes/<episode>/` and use a wav, mp3, m4a, or flac suffix. An optional annotations path must be that episode’s `episode.annotations.jsonl`.
-3. `manifest` hashes the selected files after a stability wait. It records git HEAD, sizes, script SHA-256, and observed status. It refuses paths that move while being read, symlinks that leave the root, and empty files.
-4. `push` rebuilds the manifest from the selection, `POST`s `/manifest`, `POST`s `/parts`, uploads bytes to the returned HTTPS URLs, and `POST`s `/complete`. Redirects are refused. A changed hash is a new version. A missing selected file is reported `available: false`.
+2. You copy [`tools/exporter/selection.example.yaml`](tools/exporter/selection.example.yaml) to `selection.yaml` (gitignored) and name one artifact path per episode. Each selected relative path must start with `shows/<tenant>/<show>/<season>/episodes/<episode>/` and use a wav, mp3, m4a, or flac suffix; resolved symlink targets must stay inside `--root`. An optional annotations path must be that episode’s `episode.annotations.jsonl`.
+3. `manifest` hashes the selected files after a stability wait. It records git HEAD, sizes, script SHA-256, and observed status. It refuses source changes detected during the stability check or read, symlinks that leave the root, and empty media files.
+4. `push` rebuilds the manifest from the selection, `POST`s `/manifest`, `POST`s `/parts`, uploads bytes to the returned HTTPS URLs, and `POST`s `/complete`. Redirects are refused. The ingest server decides which entries need uploads. A missing selected file is reported `available: false`.
 
-Set `PODCAST_EXPORT_TOKEN` in the environment. The CLI will not take the token as an argument. Twelve tests in [`tests/test_exporter.py`](tests/test_exporter.py) cover this contract.
+For `push`, set `PODCAST_EXPORT_TOKEN` in the environment. The CLI will not take the token as an argument. Twelve tests in [`tests/test_exporter.py`](tests/test_exporter.py) cover this contract.
 
 ### Audio checks and the other CLIs
 
@@ -145,14 +147,14 @@ These tools are not buttons in the studio. They are scripts next to the API:
 
 | Tool | What it does |
 |---|---|
-| [`tools/audio/audio_qa.py`](tools/audio/audio_qa.py) | Writes `qa-report.md`: transcription, long silences, loudness, and a word diff against `script.md` when you pass `--script`. |
-| [`tools/audio/render_suite_dramabox.py`](tools/audio/render_suite_dramabox.py) | Renders a two-host script one turn at a time through DramaBox, then splices and normalizes. |
+| [`tools/audio/audio_qa.py`](tools/audio/audio_qa.py) | Reports transcription-derived word counts and uncertain words, long silences, loudness, and script/transcript differences when you pass `--script`. The default output is `<audio-stem>.qa-report.md`. |
+| [`tools/audio/render_suite_dramabox.py`](tools/audio/render_suite_dramabox.py) | Renders a two-host script in chunks through a local DramaBox installation, then splices and normalizes. |
 | [`tools/audio/splice_dramabox.py`](tools/audio/splice_dramabox.py) | Splices an existing DramaBox `manifest.json` directory into one WAV. |
 | [`tools/audio/generate_stings.py`](tools/audio/generate_stings.py) | Asks an ACE-Step HTTP server for short stings described by a JSON spec. |
 | [`tools/audio/build_announcer_intro.sh`](tools/audio/build_announcer_intro.sh) | Mixes announcer voice, a music bed, and an applause file with ffmpeg. |
 | [`tools/audio/start_acestep_sft.sh`](tools/audio/start_acestep_sft.sh) | Starts an ACE-Step API process for sting generation. |
 
-`audio_qa.py` reads `WHISPER_URL` and `WHISPER_MODEL`, and it uses SSH for the silence and loudness pass. Set those for your own machines. The defaults in the script are not a public service.
+`audio_qa.py` reads `WHISPER_URL` and `WHISPER_MODEL`, and it uses SSH for the silence and loudness pass. Set those for your own machines. The service defaults are machine-specific. The DramaBox renderer and ACE-Step launcher also contain fixed installation paths that must match your setup.
 
 ## Built for agents
 
@@ -167,12 +169,13 @@ This repository has no MCP server and no A2A endpoint. The agent surface is HTTP
 | `gunny` | Implementation and execution |
 | `gflow` | Process and workflow |
 
-Script routes call Brigade’s OpenAI-compatible chat completions first (`{BRIGADE_BASE_URL}/openai/v1/chat/completions`) with the model name you send. A timeout, connection failure, or other `httpx.RequestError` stops there. An HTTP error status, or a body that is not a chat message, is tried once more at `{BRIGADE_BASE_URL}/agents/{BRIGADE_SCRIPT_AGENT}/chat`. If that second call fails, the route uses the local fallback. `BRIGADE_SCRIPT_AGENT` defaults to `podcast-scriptwriter`. A missing base URL or key skips the network and uses the local fallback described above. `GET /health` reports `brigade_configured`.
+Script routes call Brigade’s OpenAI-compatible chat completions first (`{BRIGADE_BASE_URL}/openai/v1/chat/completions`) with the model name you send. A timeout, connection failure, or other `httpx.RequestError` skips the retry and returns to the route’s local fallback. An HTTP error status, or a body that is not a chat message, is tried once more at `{BRIGADE_BASE_URL}/agents/{BRIGADE_SCRIPT_AGENT}/chat`. If that second call fails, the route uses the local fallback. `BRIGADE_SCRIPT_AGENT` defaults to `podcast-scriptwriter`. A missing base URL or key skips the network and uses the local fallback described above. `GET /health` reports `brigade_configured`.
 
 The studio does not send a Podcast-Ops bearer. Send one yourself when `PODCAST_OPS_API_TOKEN` is set. Replace the placeholders. Do not commit a real token.
 
 ```bash
-curl -sS "http://localhost:8011/chat/agents"
+curl -sS "http://localhost:8011/chat/agents" \
+  -H "Authorization: Bearer <podcast-ops-api-token>"
 
 curl -N -sS "http://localhost:8011/chat/brigade" \
   -H "Authorization: Bearer <podcast-ops-api-token>" \
@@ -196,15 +199,15 @@ curl -sS "http://localhost:8011/ai/script-edit" \
   -d '{
     "current_script": "<markdown script>",
     "instruction": "Tighten the cold open.",
-    "model": "podcast-scriptwriter"
+    "model": "<brigade-model>"
   }'
 ```
 
-Omit the `Authorization` header when `PODCAST_OPS_API_TOKEN` is empty. When the token is set, a missing or wrong header receives HTTP 401.
+Omit the `Authorization` header when `PODCAST_OPS_API_TOKEN` is empty. When the token is set, a missing or wrong header currently produces HTTP 500: the middleware raises `HTTPException` outside FastAPI’s route exception handler.
 
 ## Quick start
 
-This repository has no Docker Compose file and no image. Run the API and the studio as two processes. Browsing and editing the checked-in scripts need no other service. Rendering speech needs a VibeVoice server. Live model replies need Unicorn Brigade. With it unset, chat streams a notice that Brigade is not configured, and script edit uses the local fallback.
+This repository has no Dockerfile or Docker Compose file. Run the API and the studio as two processes. Browsing and editing the checked-in scripts need no other service. Rendering speech needs a VibeVoice server. Live model replies need Unicorn Brigade. With it unset, chat streams a notice that Brigade is not configured, and script edit uses the local fallback.
 
 You need:
 
@@ -224,7 +227,7 @@ cd apps/api
 ./run.sh
 ```
 
-`apps/api/run.sh` loads `apps/api/.env` when that file exists, defaults `PODCAST_OPS_ROOT` to the repository root, and listens on `0.0.0.0` port `8011` (`PORT` overrides the port). Leave `.env` absent for a first run. `.env.example` contains machine-specific paths. Copy it only after you replace those paths, and leave `PODCAST_OPS_API_TOKEN` empty while you use the bundled studio.
+`apps/api/run.sh` loads `apps/api/.env` when that file exists, defaults `PODCAST_OPS_ROOT` to the repository root, and listens on `0.0.0.0` port `8011` (`PORT` overrides the port). Leave `.env` absent for a first run. `.env.example` contains machine-specific paths. Replace its paths and service destinations, and quote values containing spaces: `run.sh` sources the file as shell code. Leave `PODCAST_OPS_API_TOKEN` empty while you use the bundled studio.
 
 Terminal B, the studio:
 
@@ -244,22 +247,22 @@ npm run dev -- --port 3000
 
 `NEXT_PUBLIC_API_BASE_URL` selects the API origin. It does not change which browser origins the API accepts. A page on any other origin needs a change to the CORS regex in `apps/api/app/main.py`.
 
-Before the first render, set `VIBEVOICE_URL` to the base URL of a server that implements `GET /voices` and `POST /podcast`. The code default is not a public server. Voice clone also needs `VIBEVOICE_VOICE_MOUNT_REMOTE`.
+Before the first render, set `VIBEVOICE_URL` to the base URL of a server that implements `GET /voices` and `POST /podcast`. The code default is machine-specific. Voice clone also needs `VIBEVOICE_VOICE_MOUNT_REMOTE`.
 
 ## Run from source
 
 The two processes above are the source path. There is no separate install step for the API beyond `uv`, which `run.sh` invokes (`uv run uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --reload`).
 
-Render one checked-in script without the UI. This calls VibeVoice and writes a WAV. It does not mix.
+From the repository root, render one checked-in script without the UI. Export `VIBEVOICE_URL` in this shell; this command does not load `apps/api/.env`. It calls VibeVoice and writes a WAV without mixing.
 
 ```bash
-python tools/audio/render_episode.py \
+uv run --project apps/api python tools/audio/render_episode.py \
   shows/magic-unicorn/a-layer-below/season-1-majiks/episodes/ep01-creative-ai-suite/script.md \
   /tmp/episode-voice-only.wav \
   --host "$VIBEVOICE_URL"
 ```
 
-Mix that WAV under a bed you supply:
+Add an intro and outro to that WAV from a bed you supply:
 
 ```bash
 tools/audio/build_episode_mix.sh \
@@ -273,15 +276,15 @@ tools/audio/build_episode_mix.sh \
 Inventory media for the sample show (the report is metadata only; this clone has no audio files checked in):
 
 ```bash
-python tools/exporter/exporter.py propose \
+uv run --project apps/api python tools/exporter/exporter.py propose \
   --root . \
   --output /tmp/proposed-selection.md
 ```
 
-The defaults for `--tenant`, `--show`, and `--season` match `shows/magic-unicorn/the-layer-above/season-1-majiks`. Pass the flags when you point `--root` at another tree. Push only after you have written a selection file and set `PODCAST_EXPORT_TOKEN` and `--endpoint` to your ingest base URL:
+The defaults for `--tenant`, `--show`, and `--season` match `shows/magic-unicorn/the-layer-above/season-1-majiks`. Pass the flags when you point `--root` at another tree. Push only after you have written a selection file and set `PODCAST_EXPORT_TOKEN`; pass your ingest base URL with `--endpoint`:
 
 ```bash
-python tools/exporter/exporter.py push \
+uv run --project apps/api python tools/exporter/exporter.py push \
   --root . \
   --selection selection.yaml \
   --endpoint "https://<producer-host>/api/podcast"
@@ -289,13 +292,13 @@ python tools/exporter/exporter.py push \
 
 ## Configuration
 
-Names only. Do not commit filled-in `.env` files, selection files, or tokens. `apps/api/.env` is gitignored. `selection.yaml` is gitignored.
+Do not commit filled-in `.env` files, selection files, or tokens. `apps/api/.env` is gitignored. `selection.yaml` is gitignored.
 
 | Variable | Read by | Meaning |
 |---|---|---|
-| `PODCAST_OPS_ROOT` | API | Directory whose `shows/` tree is the catalog. `run.sh` defaults it to the repository root when unset. |
+| `PODCAST_OPS_ROOT` | API | Root containing the `shows/` catalog and `tools/audio/` scripts. `run.sh` defaults it to the repository root when unset. |
 | `VIBEVOICE_URL` | API | Base URL of the VibeVoice server. Render, the voice list, and voice samples call it. |
-| `BRIGADE_BASE_URL` | API | Unicorn Brigade origin, with no trailing path. Chat and script routes append `/openai/v1/chat/completions`. |
+| `BRIGADE_BASE_URL` | API | Unicorn Brigade base URL. Chat and script routes append `/openai/v1/chat/completions`. |
 | `BRIGADE_API_KEY` | API | Bearer sent only to Brigade. Both this and `BRIGADE_BASE_URL` must be set or the API stays on the local fallback. |
 | `BRIGADE_SCRIPT_AGENT` | API | Agent id used on the script-route fallback. The code default is `podcast-scriptwriter`. |
 | `MUSIC_CATALOG_PATH` | API | Directory searched by `POST /music-beds/extract` for a source filename. |
@@ -328,7 +331,7 @@ flowchart TB
     Export["podcast-ops-export"]
     QA["audio_qa.py"]
   end
-  Web -->|"HTTP, port 8011"| API
+  Web -->|"HTTP, default port 8011"| API
   API --> Shows
   API --> Render
   API --> Mix
@@ -340,7 +343,7 @@ flowchart TB
   API -->|"optional chat and script calls"| Brigade["Unicorn Brigade"]
   Export -->|"/manifest, /parts, /complete"| Ingest["Ingest URL from --endpoint"]
   QA --> Whisper["Transcription HTTP service"]
-  Render --> FF["ffmpeg and ffprobe"]
+  Render --> FF["ffmpeg"]
   Mix --> FF
 ```
 
@@ -350,13 +353,13 @@ flowchart TB
 | [`apps/api`](apps/api) | `podcast-ops-api` 0.1.0. FastAPI 0.136.1 locked in `apps/api/uv.lock` (`pyproject.toml` allows `>=0.115.0`). All routes are in [`apps/api/app/main.py`](apps/api/app/main.py). |
 | `shows/` | Authoritative episode state. The API is an index and a job runner over these files. |
 | [`tools/audio`](tools/audio) | Render, mix, QA, DramaBox, stings, and the announcer-intro script. |
-| [`tools/exporter`](tools/exporter) | Read-only, selection-locked upload. |
+| [`tools/exporter`](tools/exporter) | Reads source files and uploads explicitly selected media. |
 | [`tests/test_exporter.py`](tests/test_exporter.py) | Twelve contract tests. No API or web test suite is in the tree. |
 | [`docs/`](docs) | Earlier design notes. See [Development](#development). |
 
 ### HTTP API
 
-Thirty HTTP routes and one WebSocket, all declared on the FastAPI app:
+Thirty application HTTP routes and one WebSocket, all declared on the FastAPI app (in addition to FastAPI’s generated documentation routes):
 
 | Method | Path |
 |---|---|
@@ -372,7 +375,7 @@ Thirty HTTP routes and one WebSocket, all declared on the FastAPI app:
 | GET | `/shows/{show}/seasons/{season}/episodes/{ep}/chat` |
 | GET | `/shows/{show}/seasons/{season}/episodes/{ep}` |
 | POST | `/shows/{show}/seasons/{season}/episodes/{ep}/duplicate` |
-| GET | `/shows/{show}/seasons/{season}/episodes/{ep}/audio/{filename}` |
+| GET | `/shows/{show}/seasons/{season}/episodes/{ep}/audio/{filename:path}` |
 | POST | `/shows/{show}/seasons/{season}/episodes/{ep}/render` |
 | GET | `/render-jobs` |
 | GET | `/render-jobs/{job_id}` |
@@ -405,26 +408,26 @@ Podcast-Ops/
 
 ## Part of Unicorn Commander
 
-| App | What it does |
+| App | Relationship in this checkout |
 |---|---|
-| [Ops-Center](https://github.com/Unicorn-Commander/Ops-Center) | The control plane: tenants, billing, federation, API keys, model routing |
-| [Unicorn-Brigade](https://github.com/Unicorn-Commander/Unicorn-Brigade) | The agent layer: agents, tools, memory, orchestration |
-| [Unicorn-Stable](https://github.com/Unicorn-Commander/Unicorn-Stable) | Humans and agents in the same room: chat, voice, video |
-| [Accounting-Ops](https://github.com/Unicorn-Commander/Accounting-Ops) | Agent-native accounting and books |
-| [Contact-Ops](https://github.com/Unicorn-Commander/Contact-Ops) | The shared contact and identity graph |
-| [Customer-Ops](https://github.com/Unicorn-Commander/Customer-Ops) | Customers, pipeline, quotes and outreach |
-| [Email-Ops](https://github.com/Unicorn-Commander/Email-Ops) | Agent-drafted email with a human approval inbox |
-| [Project-Ops](https://github.com/Unicorn-Commander/Project-Ops) | Projects, tasks, time and invoices |
-| [Meeting-Ops](https://github.com/Unicorn-Commander/Meeting-Ops) | Recordings, transcripts, summaries and action items |
-| [Knowledge-Ops](https://github.com/Unicorn-Commander/Knowledge-Ops) | The wiki and memory your agents ground on |
-| [Security-Ops](https://github.com/Unicorn-Commander/Security-Ops) | Authorized security scanning with engagement and attestation gates |
-| [Tax-Planning-Ops](https://github.com/Unicorn-Commander/Tax-Planning-Ops) | Tax plans, scenarios and statutory deadlines |
-| [Brand-Ops](https://github.com/Unicorn-Commander/Brand-Ops) | Brand kits, marks, voices and rules |
-| **[Podcast-Ops](https://github.com/Unicorn-Commander/Podcast-Ops)** | **Episodes, audio QA and publishing** |
-| [UUDA](https://github.com/Unicorn-Commander/UUDA) | The device agent for your fleet |
-| [fleet-map](https://github.com/Unicorn-Commander/fleet-map) | Fleet inventory and topology map |
+| [Ops-Center](https://github.com/Unicorn-Commander/Ops-Center) | No direct integration |
+| [Unicorn-Brigade](https://github.com/Unicorn-Commander/Unicorn-Brigade) | Optional studio chat and script calls |
+| [Unicorn-Stable](https://github.com/Unicorn-Commander/Unicorn-Stable) | Design reference; no direct integration |
+| [Accounting-Ops](https://github.com/Unicorn-Commander/Accounting-Ops) | No direct integration |
+| [Contact-Ops](https://github.com/Unicorn-Commander/Contact-Ops) | No direct integration |
+| [Customer-Ops](https://github.com/Unicorn-Commander/Customer-Ops) | No direct integration |
+| [Email-Ops](https://github.com/Unicorn-Commander/Email-Ops) | No direct integration |
+| [Project-Ops](https://github.com/Unicorn-Commander/Project-Ops) | No direct integration |
+| [Meeting-Ops](https://github.com/Unicorn-Commander/Meeting-Ops) | No direct integration |
+| [Knowledge-Ops](https://github.com/Unicorn-Commander/Knowledge-Ops) | No direct integration |
+| [Security-Ops](https://github.com/Unicorn-Commander/Security-Ops) | No direct integration |
+| [Tax-Planning-Ops](https://github.com/Unicorn-Commander/Tax-Planning-Ops) | No direct integration |
+| [Brand-Ops](https://github.com/Unicorn-Commander/Brand-Ops) | No direct integration |
+| **[Podcast-Ops](https://github.com/Unicorn-Commander/Podcast-Ops)** | **Episodes, audio QA and selected-media export** |
+| [UUDA](https://github.com/Unicorn-Commander/UUDA) | No direct integration |
+| [fleet-map](https://github.com/Unicorn-Commander/fleet-map) | No direct integration |
 
-Podcast-Ops calls Unicorn Brigade for studio chat, script edit, and script generation when `BRIGADE_BASE_URL` and `BRIGADE_API_KEY` are set. Episode files stay in this checkout. The exporter can upload selected audio to an ingest URL you pass on the command line. No code in this repository reads or writes the other apps.
+Podcast-Ops calls Unicorn Brigade for studio chat, script edit, and script generation when `BRIGADE_BASE_URL` and `BRIGADE_API_KEY` are set. The API reads and writes episode files under `PODCAST_OPS_ROOT`. The exporter can upload selected audio to an ingest URL you pass on the command line. The studio has no direct client for the other suite apps listed above.
 
 ## Development
 
@@ -432,7 +435,7 @@ Podcast-Ops calls Unicorn Brigade for studio chat, script edit, and script gener
 uv run --project apps/api python -m unittest discover -s tests -v
 ```
 
-That runs the twelve exporter tests with the API project’s environment (Python 3.13, plus `pyyaml` and `httpx`). `ffmpeg` / `ffprobe` and `git` need to be on `PATH`. The tests build tiny WAV fixtures under `/tmp`.
+That runs the twelve exporter tests with the API project’s environment (Python 3.13, plus `pyyaml` and `httpx`). `ffprobe` and `git` need to be on `PATH` for these tests. The tests build tiny WAV fixtures under `/tmp`.
 
 The web lint script is ESLint:
 
@@ -444,7 +447,7 @@ npm run lint
 
 `npm run build` is the production Next.js build. The API project has no lint or test extra in `pyproject.toml`.
 
-[`docs/`](docs) holds earlier design notes: an architecture sketch, agent personas, voice-model research, and studio punch lists. Those notes describe a `podcast-ops` CLI, Postgres, Redis, package layout, and SSO middleware that are not in this tree, and they name internal hosts. Use this README and the code for what runs. The exporter’s current procedure is [`tools/exporter/README.md`](tools/exporter/README.md). [`apps/api/README.md`](apps/api/README.md) is the short API note: state file, annotations file, and port 8011.
+[`docs/`](docs) holds earlier design notes: the [architecture sketch](docs/ARCHITECTURE.md), [agent personas](docs/AGENTS.md), [voice-model research](docs/voice-model-research.md), and studio punch lists. Those notes describe a `podcast-ops` CLI, Postgres, Redis, package layout, and SSO middleware that are not in this tree, and they name internal hosts. The earlier roadmap also discusses Yjs collaboration, source connectors, and Spotify/YouTube publication; those features are not implemented in this checkout. Use this README and the code for what runs. The exporter’s current procedure is [`tools/exporter/README.md`](tools/exporter/README.md). [`apps/api/README.md`](apps/api/README.md) is the short API note: state file, annotations file, and port 8011.
 
 ## Security
 
