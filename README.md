@@ -4,7 +4,7 @@
 
 A local studio for multi-voice podcast episodes: markdown scripts, speech rendering, a music mix, and AI edits that land only after you approve them.
 
-[![Licence](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-blue)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.1.0-blue)](apps/api/pyproject.toml)
 [![Python](https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white)](apps/api/pyproject.toml)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.136.1-009688?logo=fastapi&logoColor=white)](apps/api/uv.lock)
@@ -457,9 +457,7 @@ Report a vulnerability through private GitHub Security Advisories on [Unicorn-Co
 
 ## Licence
 
-Podcast-Ops is licensed under the GNU Affero General Public License v3.0 or later. The full text is [LICENSE](LICENSE).
-
-If you modify this program and run it as a service for other people over a network, the AGPL requires you to offer those users the source of the version they use.
+Podcast-Ops is licensed under the [Apache License 2.0](LICENSE). You can use, change and redistribute it, including commercially, under its terms. Our names and logos are covered by [TRADEMARKS.md](TRADEMARKS.md).
 
 <div align="center">
 
